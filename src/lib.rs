@@ -103,13 +103,13 @@ impl Display for Rank {
 
 #[derive(Debug, PartialEq)]
 pub struct Card {
-    pub suit: Suit,
     pub rank: Rank,
+    pub suit: Suit,
 }
 
 impl Display for Card {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}{}", self.suit, self.rank)
+        write!(f, "{}{}", self.rank, self.suit)
     }
 }
 
@@ -131,6 +131,34 @@ pub enum Action {
     SD { player: u32, cards: Option<Vec<Card>> },
     // Showing/Mucking their hole cards
     SM { player: u32, cards: Option<Vec<Card>> },
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let array_card_to_str = |cv: &Vec<Card>| cv.iter().map(|c| c.to_string()).collect::<Vec<String>>().join("");
+        let action = match self {
+            Action::DealingCC { cards } => format!("d db {}", array_card_to_str(cards)),
+            Action::DealingDUC { player, cards } => format!("d dh p{} {}", player, array_card_to_str(cards)),
+            Action::BringingIn { player } => format!("p{} pb", player),
+            Action::CBR { player, amount } => format!("p{} cbr {}", player, amount),
+            Action::CC { player } => format!("p{} cc", player),
+            Action::Folding { player } => format!("p{} f", player),
+            Action::SD { player, cards } => {
+                match cards {
+                    Some(value) => format!("p{} sd {}", player, array_card_to_str(value)),
+                    None => format!("p{} sb", player),
+                }
+            }
+            Action::SM { player, cards } => {
+                match cards {
+                    Some(value) => format!("p{} sm {}", player, array_card_to_str(value)),
+                    None => format!("p{} sm", player),
+                }
+            }
+        };
+
+        write!(f, "{}", action)
+    }
 }
 
 pub struct PHH {
@@ -530,7 +558,7 @@ impl PHH {
                 'Q' => Rank::Queen,
                 'K' => Rank::King,
                 '?' => Rank::Unknown,
-                _ => return Err(Error::ParseError(format!("Invalid card: {}{}", suit, rank))),
+                _ => return Err(Error::ParseError(format!("Invalid card: {}{}", rank, suit))),
             };
 
             let suit = match suit {
@@ -539,7 +567,7 @@ impl PHH {
                 'h' => Suit::Heart,
                 's' => Suit::Spade,
                 '?' => Suit::Unknown,
-                _ => return Err(Error::ParseError(format!("Invalid card: {}{}", suit, rank))),
+                _ => return Err(Error::ParseError(format!("Invalid card: {}{}", rank, suit))),
             };
 
             array.push(Card { suit, rank });
@@ -648,6 +676,132 @@ impl PHH {
         }
         Ok(array)
     }
+
+    pub fn export_phh(&self) -> String {
+        let mut array = Vec::new();
+        array.push(format!("variant = {}", self.variant));
+        array.push(format!("antes = {}", PHH::array_to_string(&self.antes)));
+
+        if let Some(blinds_or_straddles) = &self.blinds_or_straddles {
+            array.push(format!("blinds_or_straddles = {}", PHH::array_to_string(blinds_or_straddles)));
+        }
+        if let Some(bring_in) = self.bring_in {
+            array.push(format!("bring_in = {}", bring_in));
+        }
+        if let Some(small_bet) = self.small_bet {
+            array.push(format!("small_bet = {}", small_bet));
+        }
+        if let Some(big_bet) = self.big_bet {
+            array.push(format!("big_bet = {}", big_bet));
+        }
+        if let Some(min_bet) = self.min_bet {
+            array.push(format!("min_bet = {}", min_bet));
+        }
+        array.push(format!("starting_stacks = {}", PHH::array_to_string(&self.starting_stacks)));
+        let actions_strs: Vec<String> = self.actions.iter().map(|a| a.to_string()).collect();
+        array.push(format!("actions = {}", PHH::array_to_string_with_quotes(&actions_strs)));
+
+        if let Some(auther) = &self.auther {
+            array.push(format!("auther = \"{}\"", auther));
+        }
+        if let Some(event) = &self.event {
+            array.push(format!("event = \"{}\"", event));
+        }
+        if let Some(url) = &self.url {
+            array.push(format!("url = \"{}\"", url));
+        }
+        if let Some(venue) = &self.venue {
+            array.push(format!("venue = \"{}\"", venue));
+        }
+        if let Some(address) = &self.address {
+            array.push(format!("address = \"{}\"", address));
+        }
+        if let Some(city) = &self.city {
+            array.push(format!("city = \"{}\"", city));
+        }
+        if let Some(region) = &self.region {
+            array.push(format!("region = \"{}\"", region));
+        }
+        if let Some(postal_code) = &self.postal_code {
+            array.push(format!("postal_code = \"{}\"", postal_code));
+        }
+        if let Some(country) = &self.country {
+            array.push(format!("country = \"{}\"", country));
+        }
+        if let Some(time) = self.time {
+            array.push(format!("time = {}", PHH::time_to_string(time)));
+        }
+        if let Some(time_zone) = &self.time_zone {
+            array.push(format!("time_zone = \"{}\"", time_zone));
+        }
+        if let Some(time_zone_abbreviation) = &self.time_zone_abbreviation {
+            array.push(format!("time_zone_abbreviation = \"{}\"", time_zone_abbreviation));
+        }
+        if let Some(day) = self.day {
+            array.push(format!("day = {}", day));
+        }
+        if let Some(month) = self.month {
+            array.push(format!("month = {}", month));
+        }
+        if let Some(year) = self.year {
+            array.push(format!("year = {}", year));
+        }
+        if let Some(hand) = &self.hand {
+            array.push(format!("hand = \"{}\"", hand));
+        }
+        if let Some(level) = self.level {
+            array.push(format!("level = {}", level));
+        }
+        if let Some(seats) = &self.seats {
+            array.push(format!("seats = {}", PHH::array_to_string(seats)));
+        }
+        if let Some(seat_count) = self.seat_count {
+            array.push(format!("seat_count = {}", seat_count));
+        }
+        if let Some(table) = &self.table {
+            array.push(format!("table = \"{}\"", table));
+        }
+        if let Some(players) = &self.players {
+            array.push(format!("players = {}", PHH::array_to_string_with_quotes(players)));
+        }
+        if let Some(finishing_stacks) = &self.finishing_stacks {
+            array.push(format!("finishing_stacks = {}", PHH::array_to_string(finishing_stacks)));
+        }
+        if let Some(winnings) = &self.winnings {
+            array.push(format!("winnings = {}", PHH::array_to_string(winnings)));
+        }
+        if let Some(currency) = &self.currency {
+            array.push(format!("currency = \"{}\"", currency));
+        }
+        if let Some(currency_symbol) = &self.currency_symbol {
+            array.push(format!("currency_symbol = \"{}\"", currency_symbol));
+        }
+        if let Some(ante_trimming_status) = self.ante_trimming_status {
+            array.push(format!("ante_trimming_status = {}", ante_trimming_status));
+        }
+        if let Some(time_limit) = self.time_limit {
+            array.push(format!("time_limit = {}", time_limit));
+        }
+        if let Some(time_banks) = &self.time_banks {
+            array.push(format!("time_banks = {}", PHH::array_to_string(time_banks)));
+        }
+
+        array.join("\n")
+    }
+
+    fn time_to_string(t: Time) -> String{
+        format!("{}:{}:{}", t.hour(), t.minute(), t.second())
+    }
+
+    fn array_to_string<T: ToString>(array: &Vec<T>) -> String {
+        let array: Vec<String> = array.iter().map(|f| f.to_string()).collect();
+        format!("[{}]", array.join(","))
+    }
+
+    fn array_to_string_with_quotes<T: ToString>(array: &Vec<T>) -> String {
+        let array: Vec<String> = array.iter().map(|f| format!("\"{}\"", f.to_string())).collect();
+        format!("[{}]", array.join(","))
+    }
 }
 
 #[cfg(test)]
@@ -656,17 +810,17 @@ mod tests {
     use time;
 
     #[test]
-    fn parse_test() {
+    fn test() {
         let test_toml = "
-variant = \"NT\"
-antes = [0, 1, 2]
-blinds_or_straddles = [0.0, 2.0, 1.0]
+variant = NT
+antes = [0,1,2]
+blinds_or_straddles = [0,2,1]
 bring_in = 2
-small_bet = 1.0
+small_bet = 1
 big_bet = 3
-min_bet = 2.0
-starting_stacks = [4, 3, 2]
-actions = [\"d dh p1 7s4c\", \"d dh p2 Jd8h\", \"# PreFlop\", \"d db JhAs9s\", \"p1 pb\" ,\"p2 cbr 100.0\", \"p1 cc\", \"p2 f\", \"p1 sd 7s4s\", \"p2 sm\"]
+min_bet = 2
+starting_stacks = [4,3,2]
+actions = [\"d dh p1 7s4c\",\"d dh p2 Jd8h\",\"d db JhAs9s\",\"p1 pb\",\"p2 cbr 100\",\"p1 cc\",\"p2 f\",\"p1 sd 7s4s\",\"p2 sm\"]
 auther = \"Tom\"
 event = \"test' event\"
 url = \"https://foobar\"
@@ -682,19 +836,19 @@ time_zone_abbreviation = \"JST\"
 day = 3
 month = 3
 year = 2026
-hand = 33
+hand = \"33\"
 level = 2
-seats = [1, 2]
+seats = [1,2]
 seat_count = 8
-table = 1
-players = [\"foo\", \"bar\"]
-finishing_stacks = [20.0, 30.0]
-winnings = [10.0, 15.0]
+table = \"1\"
+players = [\"foo\",\"bar\"]
+finishing_stacks = [20,30]
+winnings = [10,15]
 currency = \"currency value\"
 currency_symbol = \"currency_symbol value\"
 ante_trimming_status = true
-time_limit = 20.0
-time_banks = [20.0, 11.5]
+time_limit = 20
+time_banks = [20,11.5]
 ".trim();
 
         let phh = PHH::parse_from_str(test_toml);
@@ -777,6 +931,9 @@ time_banks = [20.0, 11.5]
             assert_eq!(phh.ante_trimming_status, Some(true));
             assert_eq!(phh.time_limit, Some(20.0));
             assert_eq!(phh.time_banks, Some(vec![20.0, 11.5]));
+            
+            let export = phh.export_phh();
+            assert_eq!(test_toml, export.trim());
         }
     }
 }
