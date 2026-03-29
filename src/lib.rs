@@ -121,6 +121,7 @@ impl FromStr for Suit {
             'd' => Ok(Suit::Diamond),
             'h' => Ok(Suit::Heart),
             's' => Ok(Suit::Spade),
+            '?' => Ok(Suit::Unknown),
             _ => Err(Error::ParseError(format!("Invalid suit: {}", s))),
         }
     }
@@ -179,6 +180,7 @@ impl FromStr for Rank {
             'J' => Ok(Rank::Jack),
             'Q' => Ok(Rank::Queen),
             'K' => Ok(Rank::King),
+            '?' => Ok(Rank::Unknown),
             _ => Err(Error::ParseError(format!("Invalid Rank: {}", s))),
         }
     }
