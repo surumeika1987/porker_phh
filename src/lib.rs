@@ -5,6 +5,7 @@ use time::Time;
 use toml::{Table, Value};
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 
+#[derive(Debug)]
 pub enum Error {
     ParseError(String),
 }
@@ -419,6 +420,7 @@ impl Action {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct PHH {
     pub variant: Variant,
     pub antes: Vec<f64>,
@@ -656,7 +658,7 @@ impl PHH {
 
     pub fn export_phh(&self) -> String {
         let mut array = Vec::new();
-        array.push(format!("variant = {}", self.variant));
+        array.push(format!("variant = \"{}\"", self.variant));
         array.push(format!("antes = {}", PHH::array_to_string(&self.antes)));
 
         if let Some(blinds_or_straddles) = &self.blinds_or_straddles {
@@ -906,7 +908,10 @@ time_banks = [20,11.5]
             assert_eq!(phh.currency_symbol, Some("currency_symbol value".to_string()));
             assert_eq!(phh.ante_trimming_status, Some(true));
             assert_eq!(phh.time_limit, Some(20.0));
-            assert_eq!(phh.time_banks, Some(vec![20.0, 11.5]));           
+            assert_eq!(phh.time_banks, Some(vec![20.0, 11.5]));
+
+            let ex_phh = PHH::parse_from_str(&phh.export_phh()[..]).unwrap();
+            assert_eq!(phh, ex_phh);
         }
     }
 }
