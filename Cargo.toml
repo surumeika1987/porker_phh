@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 time = "0.3"
+serde = "1"
+toml = "1"

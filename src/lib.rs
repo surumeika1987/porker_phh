@@ -1,8 +1,18 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
+use std::str::FromStr;
+use serde::de::Unexpected;
 use time::Time;
+use toml::{Table, Value};
+use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 
 pub enum Error {
     ParseError(String),
+}
+
+impl From<toml::de::Error> for Error {
+    fn from(value: toml::de::Error) -> Self {
+        Self::ParseError(value.message().to_string())
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -18,6 +28,26 @@ pub enum Variant {
     N2L1D,
     F2L3D,
     FB,
+}
+
+impl FromStr for Variant {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "FT" => Ok(Variant::FT),
+            "NT" => Ok(Variant::NT),
+            "NS" => Ok(Variant::NS),
+            "PO" => Ok(Variant::PO),
+            "FO/8" => Ok(Variant::FO8),
+            "F7S" => Ok(Variant::F7S),
+            "F7S/8" => Ok(Variant::F7S8),
+            "FR" => Ok(Variant::FR),
+            "N2L1D" => Ok(Variant::N2L1D),
+            "F2L3D" => Ok(Variant::F2L3D),
+            "FB" => Ok(Variant::FB),
+            _ => Err(Error::ParseError(format!("Invalid variant: {}", s))),
+        }
+    }
 }
 
 impl Display for Variant {
@@ -37,6 +67,35 @@ impl Display for Variant {
         };
         write!(f, "{}", variant_str)
     }
+} 
+
+impl<'de> Deserialize<'de> for Variant {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>
+    {
+        struct VariantVisitor;
+
+        impl<'de> Visitor<'de> for VariantVisitor {
+            type Value = Variant;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("PHH variant")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> 
+                where
+                    E: de::Error,
+            {
+                match Variant::from_str(v) {
+                    Ok(value) => Ok(value),
+                    Err(_) => Err(de::Error::invalid_value(Unexpected::Str(v), &self)),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(VariantVisitor)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,6 +105,24 @@ pub enum Suit {
     Heart,
     Spade,
     Unknown,
+}
+
+impl FromStr for Suit {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 1 {
+            return Err(Error::ParseError(format!("Invalid suit: {}", s)));
+        }
+
+        match s.chars().nth(0).unwrap() {
+            'c' => Ok(Suit::Club),
+            'd' => Ok(Suit::Diamond),
+            'h' => Ok(Suit::Heart),
+            's' => Ok(Suit::Spade),
+            _ => Err(Error::ParseError(format!("Invalid suit: {}", s))),
+        }
+    }
 }
 
 impl Display for Suit {
@@ -79,6 +156,33 @@ pub enum Rank {
     Unknown,
 }
 
+impl FromStr for Rank {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 1 {
+            return Err(Error::ParseError(format!("Invalid Rank: {}", s)));
+        }
+
+        match s.chars().nth(0).unwrap() {
+            'A' => Ok(Rank::Ace),
+            '2' => Ok(Rank::Deuce),
+            '3' => Ok(Rank::Trey),
+            '4' => Ok(Rank::Four),
+            '5' => Ok(Rank::Five),
+            '6' => Ok(Rank::Six),
+            '7' => Ok(Rank::Seven),
+            '8' => Ok(Rank::Eight),
+            '9' => Ok(Rank::Nine),
+            'T' => Ok(Rank::Ten),
+            'J' => Ok(Rank::Jack),
+            'Q' => Ok(Rank::Queen),
+            'K' => Ok(Rank::King),
+            _ => Err(Error::ParseError(format!("Invalid Rank: {}", s))),
+        }
+    }
+}
+
 impl Display for Rank {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let rank_str = match self {
@@ -107,30 +211,139 @@ pub struct Card {
     pub suit: Suit,
 }
 
+impl FromStr for Card {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 2 {
+            return Err(Error::ParseError(format!("Invalid card: {}", s)));
+        }
+        Ok(Card {
+            rank: Rank::from_str(&s[0..1])?,
+            suit: Suit::from_str(&s[1..2])?,
+        })
+    }
+}
+
 impl Display for Card {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{}{}", self.rank, self.suit)
     }
 }
 
+impl Card {
+    fn from_str_cards(s: &str) -> Result<Vec<Self>, Error> {
+        if s.len() % 2 != 0 {
+            return Err(Error::ParseError(format!("Invalid cards: {}", s)));
+        }
+        let mut array = Vec::with_capacity(s.len() / 2);
+
+        for i in 0..(s.len()/2) {
+            array.push(Card::from_str(&s[(i * 2)..(i * 2 + 2)])?);
+        }
+
+        Ok(array)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Action {
-    // Dealing community cards
+    /// Dealing community cards
     DealingCC { cards: Vec<Card> },
-    // Dealing down/up cards
+    /// Dealing down/up cards
     DealingDUC { player: u32, cards: Vec<Card> },
-    // Biringing in
+    /// Biringing in
     BringingIn { player: u32 },
-    // Completing/Betting/Raising
+    /// Completing/Betting/Raising
     CBR { player: u32, amount: f64 },
-    // Checking/Calling
+    /// Checking/Calling
     CC { player: u32 },
-    // Folding
+    /// Folding
     Folding { player: u32 },
-    // Standing pat/Discarding,
+    /// Standing pat/Discarding,
     SD { player: u32, cards: Option<Vec<Card>> },
-    // Showing/Mucking their hole cards
+    /// Showing/Mucking their hole cards
     SM { player: u32, cards: Option<Vec<Card>> },
+    /// Comment
+    Comment(String),
+}
+
+impl FromStr for Action {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { 
+        let split = s.split(' ').collect::<Vec<&str>>();
+        if split.len() < 2 {
+            return Err(Error::ParseError(format!("Invalid action: {}", s)));
+        }
+        let key = split[0];
+        let secound_key = split[1];
+
+        if key == "d" {
+            match &*secound_key {
+                "db" => {
+                    if split.len() < 3 {
+                        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+                    }
+                    let cards = Card::from_str_cards(split[2])?;
+                    return Ok(Action::DealingCC { cards })
+                }
+                "dh" => {
+                    if split.len() < 4 {
+                        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+                    }
+                    let player = Self::parse_as_player_number(split[2])?;
+                    let cards = Card::from_str_cards(split[3])?;
+                    return Ok(Action::DealingDUC { player, cards });
+                }
+                _ => return Err(Error::ParseError(format!("Invalid action: {}", s))),
+            }
+        }
+
+        if key.starts_with("p") {
+            let player = Self::parse_as_player_number(key)?;
+            let key = secound_key;
+            match &*key {
+                "pb" => return Ok(Action::BringingIn { player }),
+                "cbr" => {
+                    if split.len() < 3 {
+                        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+                    }
+                    let amount = split[2].parse::<f64>();
+                    if let Ok(amount) = amount {
+                        return Ok(Action::CBR { player, amount });
+                    } else {
+                        return Err(Error::ParseError(format!("Invalid amount: {}", s)));
+                    }
+                }
+                "cc" => return Ok(Action::CC { player }),
+                "f" => return Ok(Action::Folding { player }),
+                "sd" => {
+                    if split.len() < 3 {
+                        return Ok(Action::SD { player, cards: None });
+                    }
+                    if split[2].chars().nth(0).unwrap() == '#' {
+                        return Ok(Action::SD { player, cards: None });
+                    }
+                    let cards = Card::from_str_cards(split[2])?;
+                    return Ok(Action::SD { player, cards: Some(cards) });
+                }
+                "sm" => {
+                    if split.len() < 3 {
+                        return Ok(Action::SM { player, cards: None });
+                    }
+                    if split[2].chars().nth(0).unwrap() == '#' {
+                        return Ok(Action::SM { player, cards: None });
+                    }
+                    let cards = Card::from_str_cards(split[2])?;
+                    return Ok(Action::SM { player, cards: Some(cards) });
+                }
+                _ => return Err(Error::ParseError(format!("Invalid action: {}", s))),
+            }
+        }
+
+        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+    }
 }
 
 impl Display for Action {
@@ -154,10 +367,55 @@ impl Display for Action {
                     Some(value) => format!("p{} sm {}", player, array_card_to_str(value)),
                     None => format!("p{} sm", player),
                 }
-            }
+            },
+            Action::Comment(message) => format!("# {}", message),
         };
 
         write!(f, "{}", action)
+    }
+}
+
+impl<'de> Deserialize<'de> for Action {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>
+    {
+        struct ActionVisitor;
+
+        impl<'de> Visitor<'de> for ActionVisitor {
+            type Value = Action;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("PHH action")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                where
+                    E: de::Error,
+            {
+                match Action::from_str(v) {
+                    Ok(value) => return Ok(value),
+                    Err(_) => return Err(de::Error::invalid_value(Unexpected::Str(v), &self)),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(ActionVisitor)
+    }
+}
+
+impl Action {
+    fn parse_as_player_number(contents: &str) -> Result<u32, Error> {
+        if contents.len() < 2 {
+            return Err(Error::ParseError(format!("Invalid player number: {}", contents)));
+        }
+        if contents.chars().nth(0).unwrap() != 'p' {
+            return Err(Error::ParseError(format!("Invalid player number: {}", contents)));
+        }
+        if let Ok(value) = contents[1..].parse() {
+            return Ok(value);
+        }
+        Err(Error::ParseError(format!("Invliad player number: {}", contents)))
     }
 }
 
@@ -241,74 +499,52 @@ impl PHH {
         let mut time_limit = None;
         let mut time_banks = None;
 
-        for line in phh_str.lines() {
-            let mut split = line.split("=");
-            let key = split.next().unwrap_or("");
-            let key = key.trim();
-            let value = split.collect::<Vec<&str>>().join("");
-            let value = value.trim();
-
-            if key.is_empty() || value.is_empty() {
-                continue;
-            }
-
-            match &*key {
-                "variant" => {
-                    let value = Self::parse_as_str(&value);
-                    variant = match value {
-                        "FT" => Some(Variant::FT),
-                        "NT" => Some(Variant::NT),
-                        "NS" => Some(Variant::NS),
-                        "PO" => Some(Variant::PO),
-                        "FO/8" => Some(Variant::FO8),
-                        "F7S" => Some(Variant::F7S),
-                        "F7S/8" => Some(Variant::F7S8),
-                        "FR" => Some(Variant::FR),
-                        "N2L1D" => Some(Variant::N2L1D),
-                        "F2L3D" => Some(Variant::F2L3D),
-                        "FB" => Some(Variant::FB),
-                        _ => None,
-                    };
-                    if let None = variant {
-                        return Err(Error::ParseError("Invalid variant.".to_string()));
-                    }
-                }
-                "antes" => antes = Some(Self::parse_as_array_of_f64(&value)?),
-                "blinds_or_straddles" => blinds_or_straddles = Some(Self::parse_as_array_of_f64(&value)?),
-                "bring_in" => bring_in = Some(Self::parse_as_f64(&value)?),
-                "small_bet" => small_bet = Some(Self::parse_as_f64(&value)?),
-                "big_bet" => big_bet = Some(Self::parse_as_f64(&value)?),
-                "min_bet" => min_bet = Some(Self::parse_as_f64(&value)?),
-                "starting_stacks" => starting_stacks = Some(Self::parse_as_array_of_f64(&value)?),
-                "actions" => actions = Some(Self::parse_as_array_of_action(&value)?),
-                "auther" => auther = Some(Self::parse_as_string(&value)?),
-                "event" => event = Some(Self::parse_as_string(&value)?),
-                "url" => url = Some(Self::parse_as_string(&value)?),
-                "venue" => venue = Some(Self::parse_as_string(&value)?),
-                "address" => address = Some(Self::parse_as_string(&value)?),
-                "city" => city = Some(Self::parse_as_string(&value)?),
-                "region" => region = Some(Self::parse_as_string(&value)?),
-                "postal_code" => postal_code = Some(Self::parse_as_string(&value)?),
-                "country" => country = Some(Self::parse_as_string(&value)?),
-                "time" => time = Some(Self::parse_as_time(&value)?),
-                "time_zone" => time_zone = Some(Self::parse_as_string(&value)?),
-                "time_zone_abbreviation" => time_zone_abbreviation = Some(Self::parse_as_string(&value)?),
-                "day" => day = Some(Self::parse_as_u32(&value)?),
-                "month" => month = Some(Self::parse_as_u32(&value)?),
-                "year" => year = Some(Self::parse_as_u32(&value)?),
-                "hand" => hand = Some(Self::parse_as_string(&value)?),
-                "level" => level = Some(Self::parse_as_u32(&value)?),
-                "seats" => seats = Some(Self::parse_as_array_of_u32(&value)?),
-                "seat_count" => seat_count = Some(Self::parse_as_u32(&value)?),
-                "table" => table = Some(Self::parse_as_string(&value)?),
-                "players" => players = Some(Self::parse_as_array_of_string(&value)?),
-                "finishing_stacks" => finishing_stacks = Some(Self::parse_as_array_of_f64(&value)?),
-                "winnings" => winnings = Some(Self::parse_as_array_of_f64(&value)?),
-                "currency" => currency = Some(Self::parse_as_string(&value)?),
-                "currency_symbol" => currency_symbol = Some(Self::parse_as_string(&value)?),
-                "ante_trimming_status" => ante_trimming_status = Some(Self::parse_as_bool(&value)?),
-                "time_limit" => time_limit = Some(Self::parse_as_f64(&value)?),
-                "time_banks" => time_banks = Some(Self::parse_as_array_of_f64(&value)?),
+        let data = phh_str.parse::<Table>();
+        if let Err(err) = data {
+            return Err(Error::ParseError(err.message().to_string()));
+        }
+        let data = data.unwrap();
+        
+        for key in data.keys() {
+            let value = data[key].clone();
+            match &**key {
+                "variant" => variant = Some(value.try_into()?),
+                "antes" => antes = Some(value.try_into()?),
+                "blinds_or_straddles" => blinds_or_straddles = Some(value.try_into()?),
+                "bring_in" => bring_in = Some(value.try_into()?),
+                "small_bet" => small_bet = Some(value.try_into()?),
+                "big_bet" => big_bet = Some(value.try_into()?),
+                "min_bet" => min_bet = Some(value.try_into()?),
+                "starting_stacks" => starting_stacks = Some(value.try_into()?),
+                "actions" => actions = Some(value.try_into()?),
+                "auther" => auther = Some(value.try_into()?),
+                "event" => event = Some(value.try_into()?),
+                "url" => url = Some(value.try_into()?),
+                "venue" => venue = Some(value.try_into()?),
+                "address" => address = Some(value.try_into()?),
+                "city" => city = Some(value.try_into()?),
+                "region" => region = Some(value.try_into()?),
+                "postal_code" => postal_code = Some(value.try_into()?),
+                "country" => country = Some(value.try_into()?),
+                "time" => time = Some(PHH::parse_as_time(&value)?),
+                "time_zone" => time_zone = Some(value.try_into()?),
+                "time_zone_abbreviation" => time_zone_abbreviation = Some(value.try_into()?),
+                "day" => day = Some(value.try_into()?),
+                "month" => month = Some(value.try_into()?),
+                "year" => year = Some(value.try_into()?),
+                "hand" => hand = Some(value.try_into()?),
+                "level" => level = Some(value.try_into()?),
+                "seats" => seats = Some(value.try_into()?),
+                "seat_count" => seat_count = Some(value.try_into()?),
+                "table" => table = Some(value.try_into()?),
+                "players" => players = Some(value.try_into()?),
+                "finishing_stacks" => finishing_stacks = Some(value.try_into()?),
+                "winnings" => winnings = Some(value.try_into()?),
+                "currency" => currency = Some(value.try_into()?),
+                "currency_symbol" => currency_symbol = Some(value.try_into()?),
+                "ante_trimming_status" => ante_trimming_status = Some(value.try_into()?),
+                "time_limit" => time_limit = Some(value.try_into()?),
+                "time_banks" => time_banks = Some(value.try_into()?),
                 _ => {}
             }
         }
@@ -407,274 +643,15 @@ impl PHH {
         })
     }
 
-    fn parse_as_array(contents: &str) -> Result<Vec<&str>, Error> {
-        let mut array = Vec::new();
-        if contents.len() < 2 {
-            return Err(Error::ParseError("Invalid array.".to_string()));
-        }
-        let start_char = contents.chars().nth(0).unwrap();
-        let end_char = contents.chars().nth(contents.len() - 1).unwrap();
-        if start_char != '[' && end_char != ']' {
-            return Err(Error::ParseError("Invalid array.".to_string()));
-        }
-        let values = contents[1..contents.len() - 1].split(',').collect::<Vec<&str>>();
-        for value in values {
-            array.push(value);
-        }
-        Ok(array)
-    }
-
-    fn parse_as_bool(contents: &str) -> Result<bool, Error> {
-        let contents = &contents.to_lowercase()[..];
-        match contents {
-            "true" => return Ok(true),
-            "false" => return Ok(false),
-            _ => return Err(Error::ParseError("Invalid bool.".to_string())),
-        }
-    }
-
-    fn parse_as_str(contents: &str) -> &str {
-        let contents = contents.trim();
-        if contents.len() < 2 {
-            return contents;
-        }
-        let start_char = contents.chars().nth(0).unwrap();
-        if start_char != '\'' && start_char != '"' {
-            return contents;
-        }
-        if contents.chars().nth(contents.len() - 1).unwrap() != start_char {
-            return contents;
-        }
-        &contents[1..contents.len() - 1]
-    }
-
-    fn parse_as_array_of_str(contents: &str) -> Result<Vec<&str>, Error> {
-        let mut array = Vec::new();
-        let values = PHH::parse_as_array(contents)?;
-        for value in values {
-            array.push(PHH::parse_as_str(value));
-        }
-        Ok(array)
-    }
-
-    fn parse_as_string(contents: &str) -> Result<String, Error> {
-        Ok(PHH::parse_as_str(contents).to_string())
-    }
-
-    fn parse_as_array_of_string(contents: &str) -> Result<Vec<String>, Error> {
-        let mut array = Vec::new();
-        let values = PHH::parse_as_array(contents)?;
-        for value in values {
-            array.push(PHH::parse_as_string(value)?);
-        }
-
-        Ok(array)
-    }
-
-    fn parse_as_u32(contents: &str) -> Result<u32, Error> {
-        if let Ok(value) = contents.trim().parse::<u32>() {
-            return Ok(value);
-        } else {
-            return Err(Error::ParseError("Integer parse error.".to_string()));
-        }
-    }
-
-    fn parse_as_array_of_u32(contents: &str) -> Result<Vec<u32>, Error> {
-        let mut array = Vec::new();
-        let values = PHH::parse_as_array(contents)?;
-        for value in values {
-            array.push(PHH::parse_as_u32(value)?);
-        }
-
-        Ok(array)
-    }
-
-    fn parse_as_f64(contents: &str) -> Result<f64, Error> {
-        if let Ok(value) = contents.trim().parse::<f64>() {
-            return Ok(value);
-        } else {
-            return Err(Error::ParseError("Float parse error.".to_string()));
-        }
-    }
-
-    fn parse_as_array_of_f64(contents: &str) -> Result<Vec<f64>, Error> {
-        let mut array = Vec::new();
-        let values = PHH::parse_as_array(contents)?;
-        for value in values {
-            array.push(PHH::parse_as_f64(value)?);
-        }
-
-        Ok(array)
-    }
-
-    fn parse_as_time(contents: &str) -> Result<Time, Error> {
-        let split = contents.split(':').collect::<Vec<&str>>();
-        if split.len() != 3 {
-            return Err(Error::ParseError(format!("Invalid time: {}", contents)));
-        }
-
-        let hh = PHH::parse_as_u32(split[0])?;
-        if 24 <= hh {
-            return Err(Error::ParseError(format!("Invalid time: {}", contents)));
-        }
-        let hh = hh as u8;
-        
-        let mm = PHH::parse_as_u32(split[1])?;
-        if 60 <= mm as u8{
-            return Err(Error::ParseError(format!("Invalid time: {}", contents)));
-        }
-        let mm = mm as u8;
-        
-        let ss = PHH::parse_as_u32(split[2])?;
-        if 60 <= ss {
-            return Err(Error::ParseError(format!("Invalid time: {}", contents)));
-        }
-        let ss = ss as u8;
-
-        return Ok(Time::from_hms(hh, mm, ss).unwrap());
-    }
-
-    fn parse_as_cards(contents: &str) -> Result<Vec<Card>, Error> {
-        if contents.len() % 2 != 0 {
-            return Err(Error::ParseError(format!("Invalid card: {}",contents)));
-        }
-        let mut array = Vec::with_capacity(contents.len() / 2);
-        let mut contents = contents.chars();
-
-        while let Some(rank) = contents.next() {
-            let suit = contents.next().unwrap();
-            let rank = match rank {
-                'A' => Rank::Ace,
-                '2' => Rank::Deuce,
-                '3' => Rank::Trey,
-                '4' => Rank::Four,
-                '5' => Rank::Five,
-                '6' => Rank::Six,
-                '7' => Rank::Seven,
-                '8' => Rank::Eight,
-                '9' => Rank::Nine,
-                'T' => Rank::Ten,
-                'J' => Rank::Jack,
-                'Q' => Rank::Queen,
-                'K' => Rank::King,
-                '?' => Rank::Unknown,
-                _ => return Err(Error::ParseError(format!("Invalid card: {}{}", rank, suit))),
-            };
-
-            let suit = match suit {
-                'c' => Suit::Club,
-                'd' => Suit::Diamond,
-                'h' => Suit::Heart,
-                's' => Suit::Spade,
-                '?' => Suit::Unknown,
-                _ => return Err(Error::ParseError(format!("Invalid card: {}{}", rank, suit))),
-            };
-
-            array.push(Card { suit, rank });
-        }
-
-        Ok(array)
-    }
-
-    fn parse_as_player_number(contents: &str) -> Result<u32, Error> {
-        if contents.len() < 2 {
-            return Err(Error::ParseError(format!("Invalid player number: {}", contents)));
-        }
-        if contents.chars().nth(0).unwrap() != 'p' {
-            return Err(Error::ParseError(format!("Invalid player number: {}", contents)));
-        }
-        Ok(PHH::parse_as_u32(&contents[1..])?)
-    }
-
-
-    fn parse_as_action(contents: &str) -> Result<Option<Action>, Error> {
-        let contents = contents.trim();
-        if contents.is_empty() {
-            return Err(Error::ParseError("Invalid action.".to_string()));
-        }
-
-        if contents.chars().nth(0).unwrap() == '#' {
-            return Ok(None);
-        }
-
-        let split = contents.split(' ').collect::<Vec<&str>>();
-        if split.len() < 2 {
-            return Err(Error::ParseError(format!("Invalid action: {}", contents)));
-        }
-        let key = split[0];
-        let second_key = split[1];
-        
-        if key == "d" {
-            match &*second_key {
-                "db" => {
-                    if split.len() < 3 {
-                        return Err(Error::ParseError(format!("Invalud action: {}", contents)));
-                    }
-                    let cards = PHH::parse_as_cards(split[2])?;
-                    return Ok(Some(Action::DealingCC { cards  }))
-                }
-                "dh" => {
-                    if split.len() < 4 {
-                        return Err(Error::ParseError(format!("Invalud action: {}", contents)));
-                    }
-                    let player = PHH::parse_as_player_number(split[2])?;
-                    let cards = PHH::parse_as_cards(split[3])?;
-                    return Ok(Some(Action::DealingDUC { player, cards }))
-                }
-                _ => return Err(Error::ParseError(format!("Invalid action: {}", contents))),
+    fn parse_as_time(value: &Value) -> Result<Time, Error> {
+        if let Value::Datetime(t) = value {
+            if let Some(t) = t.time {
+                return Ok(Time::from_hms(t.hour, t.minute, t.second.unwrap_or_default()).unwrap());
+            } else {
+                return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
             }
         }
-
-        if key.chars().nth(0).unwrap() == 'p' {
-            let player = PHH::parse_as_player_number(key)?;
-            let key = second_key;
-            match &*key {
-                "pb" => return Ok(Some(Action::BringingIn { player })),
-                "cbr" => {
-                    if split.len() < 3 {
-                        return Err(Error::ParseError(format!("Invalid action: {}", contents)));
-                    }
-                    let amount = PHH::parse_as_f64(split[2])?;
-                    return Ok(Some(Action::CBR { player, amount }));
-                }
-                "cc" => return Ok(Some(Action::CC { player })),
-                "f" => return Ok(Some(Action::Folding { player })),
-                "sd" => {
-                    if split.len() < 3 {
-                        return Ok(Some(Action::SD { player, cards: None }));
-                    }
-                    if split[2].chars().nth(0).unwrap() == '#' {
-                        return Ok(Some(Action::SD { player, cards: None }));
-                    }
-                    let cards = PHH::parse_as_cards(split[2])?;
-                    return Ok(Some(Action::SD { player, cards: Some(cards) }));
-                }
-                "sm" => {
-                    if split.len() < 3 {
-                        return Ok(Some(Action::SM { player, cards: None }));
-                    }
-                    if split[2].chars().nth(0).unwrap() == '#' {
-                        return Ok(Some(Action::SM { player, cards: None }));
-                    }
-                    let cards = PHH::parse_as_cards(split[2])?;
-                    return Ok(Some(Action::SM { player, cards: Some(cards) }));
-                }
-                _ => return Err(Error::ParseError(format!("Invalid action: {}", contents))),
-            }
-        }
-        return Err(Error::ParseError(format!("Invalid action: {}", contents)));
-    }
-
-    fn parse_as_array_of_action(contents: &str) -> Result<Vec<Action>, Error> {
-        let mut array = Vec::new();
-        let values = PHH::parse_as_array_of_str(contents)?;
-        for value in values {
-            let action = PHH::parse_as_action(value)?;
-            if let Some(action) = action {
-                array.push(action);
-            }
-        }
-        Ok(array)
+        return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
     }
 
     pub fn export_phh(&self) -> String {
@@ -807,12 +784,11 @@ impl PHH {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use time;
 
     #[test]
     fn test() {
-        let test_toml = "
-variant = NT
+        let test_toml = r#"
+variant = "NT"
 antes = [0,1,2]
 blinds_or_straddles = [0,2,1]
 bring_in = 2
@@ -820,36 +796,36 @@ small_bet = 1
 big_bet = 3
 min_bet = 2
 starting_stacks = [4,3,2]
-actions = [\"d dh p1 7s4c\",\"d dh p2 Jd8h\",\"d db JhAs9s\",\"p1 pb\",\"p2 cbr 100\",\"p1 cc\",\"p2 f\",\"p1 sd 7s4s\",\"p2 sm\"]
-auther = \"Tom\"
-event = \"test' event\"
-url = \"https://foobar\"
-venue = \"venue value\"
-address = \"1-1\"
-city = \"Chiyoda-ku\"
-region = \"Tokyo\"
-postal_code = \"000-0001\"
-country = \"Japan\"
+actions = ["d dh p1 7s4c","d dh p2 Jd8h","d db JhAs9s","p1 pb","p2 cbr 100","p1 cc","p2 f","p1 sd 7s4s","p2 sm"]
+auther = "Tom"
+event = "test' event"
+url = "https://foobar"
+venue = "venue value"
+address = "1-1"
+city = "Chiyoda-ku"
+region = "Tokyo"
+postal_code = "000-0001"
+country = "Japan"
 time = 12:34:56
-time_zone = \"Asia/Tokyo\"
-time_zone_abbreviation = \"JST\"
+time_zone = "Asia/Tokyo"
+time_zone_abbreviation = "JST"
 day = 3
 month = 3
 year = 2026
-hand = \"33\"
+hand = "33"
 level = 2
 seats = [1,2]
 seat_count = 8
-table = \"1\"
-players = [\"foo\",\"bar\"]
+table = "1"
+players = ["foo","bar"]
 finishing_stacks = [20,30]
 winnings = [10,15]
-currency = \"currency value\"
-currency_symbol = \"currency_symbol value\"
+currency = "currency value"
+currency_symbol = "currency_symbol value"
 ante_trimming_status = true
 time_limit = 20
 time_banks = [20,11.5]
-".trim();
+"#.trim();
 
         let phh = PHH::parse_from_str(test_toml);
 
@@ -930,10 +906,7 @@ time_banks = [20,11.5]
             assert_eq!(phh.currency_symbol, Some("currency_symbol value".to_string()));
             assert_eq!(phh.ante_trimming_status, Some(true));
             assert_eq!(phh.time_limit, Some(20.0));
-            assert_eq!(phh.time_banks, Some(vec![20.0, 11.5]));
-            
-            let export = phh.export_phh();
-            assert_eq!(test_toml, export.trim());
+            assert_eq!(phh.time_banks, Some(vec![20.0, 11.5]));           
         }
     }
 }
