@@ -1,8 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use serde::de::Unexpected;
-use time::Time;
-use toml::Table;
+use toml::{Table, value::{Datetime, Time}};
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 
 #[derive(Debug)]
@@ -535,7 +534,16 @@ impl FromStr for PHH {
                 "region" => region = Some(value.try_into()?),
                 "postal_code" => postal_code = Some(value.try_into()?),
                 "country" => country = Some(value.try_into()?),
-                "time" => time = Some(PHH::parse_as_time(&value)?),
+                "time" => {
+                    match value {
+                        toml::Value::Datetime(dt) => {
+                            if let Some(t) = dt.time {
+                                time = Some(t);
+                            }
+                        }
+                        _ => return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())))
+                    }
+                }
                 "time_zone" => time_zone = Some(value.try_into()?),
                 "time_zone_abbreviation" => time_zone_abbreviation = Some(value.try_into()?),
                 "day" => day = Some(value.try_into()?),
@@ -706,7 +714,7 @@ impl Display for PHH {
             array.push(format!("country = \"{}\"", country));
         }
         if let Some(time) = self.time {
-            array.push(format!("time = {}", PHH::time_to_string(time)));
+            array.push(format!("time = {}", time));
         }
         if let Some(time_zone) = &self.time_zone {
             array.push(format!("time_zone = \"{}\"", time_zone));
@@ -769,19 +777,15 @@ impl Display for PHH {
 }
 
 impl PHH {
-    fn parse_as_time(value: &toml::Value) -> Result<Time, Error> {
-        if let toml::Value::Datetime(t) = value {
-            if let Some(t) = t.time {
-                return Ok(Time::from_hms(t.hour, t.minute, t.second.unwrap_or_default()).unwrap());
-            } else {
-                return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
+    fn str_to_time(s: &str) -> Result<Time, Error> {
+        let dt = Datetime::from_str(&format!("1970/01/01 {}", s)[..]);
+        if let Ok(dt) = dt {
+            if let Some(time) = dt.time {
+                return Ok(time);
             }
         }
-        return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
-    }
 
-    fn time_to_string(t: Time) -> String{
-        format!("{}:{}:{}", t.hour(), t.minute(), t.second())
+        Err(Error::ParseError(format!(r#"invalid type: string "{}", expected a TOML datetime"#, s)))
     }
 
     fn array_to_string<T: ToString>(array: &Vec<T>) -> String {
@@ -902,7 +906,7 @@ time_banks = [20,11.5]
             assert_eq!(phh.region, Some("Tokyo".to_string()));
             assert_eq!(phh.postal_code, Some("000-0001".to_string()));
             assert_eq!(phh.country, Some("Japan".to_string()));
-            assert_eq!(phh.time, Some(Time::from_hms(12, 34, 56).unwrap()));
+            assert_eq!(phh.time, Some(Time { hour: 12, minute: 34, second: Some(56), nanosecond: None }));
             assert_eq!(phh.time_zone, Some("Asia/Tokyo".to_string()));
             assert_eq!(phh.time_zone_abbreviation, Some("JST".to_string()));
             assert_eq!(phh.day, Some(3));
