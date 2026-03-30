@@ -275,6 +275,9 @@ impl FromStr for Action {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> { 
+        if s.starts_with("#") {
+            return Ok(Action::Comment(s[1..].trim().to_string()));
+        }
         let split = s.split(' ').collect::<Vec<&str>>();
         if split.len() < 2 {
             return Err(Error::ParseError(format!("Invalid action: {}", s)));
