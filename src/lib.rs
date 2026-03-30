@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use serde::de::Unexpected;
 use time::Time;
-use toml::{Table, Value};
+use toml::Table;
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 
 #[derive(Debug)]
@@ -769,8 +769,8 @@ impl Display for PHH {
 }
 
 impl PHH {
-    fn parse_as_time(value: &Value) -> Result<Time, Error> {
-        if let Value::Datetime(t) = value {
+    fn parse_as_time(value: &toml::Value) -> Result<Time, Error> {
+        if let toml::Value::Datetime(t) = value {
             if let Some(t) = t.time {
                 return Ok(Time::from_hms(t.hour, t.minute, t.second.unwrap_or_default()).unwrap());
             } else {
@@ -841,7 +841,7 @@ time_limit = 20
 time_banks = [20,11.5]
 "#.trim();
 
-        let phh = PHH::parse_from_str(test_toml);
+        let phh = PHH::from_str(test_toml);
 
         if let Err(err) = phh {
             match err {
@@ -922,7 +922,7 @@ time_banks = [20,11.5]
             assert_eq!(phh.time_limit, Some(20.0));
             assert_eq!(phh.time_banks, Some(vec![20.0, 11.5]));
 
-            let ex_phh = PHH::parse_from_str(&phh.export_phh()[..]).unwrap();
+            let ex_phh = PHH::from_str(&phh.to_string()[..]).unwrap();
             assert_eq!(phh, ex_phh);
         }
     }
