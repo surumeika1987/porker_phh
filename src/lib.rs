@@ -1,7 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use serde::de::Unexpected;
-use toml::{Table, value::{Datetime, Time}};
+use toml::{Table, Value, value::{Datetime, Time}, map::Map};
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 
 #[derive(Debug)]
@@ -463,6 +463,7 @@ pub struct PHH {
     pub ante_trimming_status: Option<bool>,
     pub time_limit: Option<f64>,
     pub time_banks: Option<Vec<f64>>,
+    pub custom_field: Map<String, Value>,
 }
 
 impl FromStr for PHH {
@@ -506,6 +507,7 @@ impl FromStr for PHH {
         let mut ante_trimming_status = None;
         let mut time_limit = None;
         let mut time_banks = None;
+        let mut custom_field = Map::new();
 
         let data = s.parse::<Table>();
         if let Err(err) = data {
@@ -563,7 +565,11 @@ impl FromStr for PHH {
                 "ante_trimming_status" => ante_trimming_status = Some(value.try_into()?),
                 "time_limit" => time_limit = Some(value.try_into()?),
                 "time_banks" => time_banks = Some(value.try_into()?),
-                _ => {}
+                _ => {
+                    if key.starts_with('_') {
+                        custom_field.insert(key[1..].to_string(), value);
+                    }
+                }
             }
         }
 
@@ -658,6 +664,7 @@ impl FromStr for PHH {
             ante_trimming_status,
             time_limit,
             time_banks,
+            custom_field,
         })
     }
 }
