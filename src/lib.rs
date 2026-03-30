@@ -466,8 +466,10 @@ pub struct PHH {
     pub time_banks: Option<Vec<f64>>,
 }
 
-impl PHH {
-    pub fn parse_from_str(phh_str: &str) -> Result<Self, Error> {
+impl FromStr for PHH {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut variant = None;
         let mut antes = None;
         let mut blinds_or_straddles = None;
@@ -506,7 +508,7 @@ impl PHH {
         let mut time_limit = None;
         let mut time_banks = None;
 
-        let data = phh_str.parse::<Table>();
+        let data = s.parse::<Table>();
         if let Err(err) = data {
             return Err(Error::ParseError(err.message().to_string()));
         }
@@ -649,19 +651,10 @@ impl PHH {
             time_banks,
         })
     }
+}
 
-    fn parse_as_time(value: &Value) -> Result<Time, Error> {
-        if let Value::Datetime(t) = value {
-            if let Some(t) = t.time {
-                return Ok(Time::from_hms(t.hour, t.minute, t.second.unwrap_or_default()).unwrap());
-            } else {
-                return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
-            }
-        }
-        return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
-    }
-
-    pub fn export_phh(&self) -> String {
+impl Display for PHH {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut array = Vec::new();
         array.push(format!("variant = \"{}\"", self.variant));
         array.push(format!("antes = {}", PHH::array_to_string(&self.antes)));
@@ -769,8 +762,22 @@ impl PHH {
         if let Some(time_banks) = &self.time_banks {
             array.push(format!("time_banks = {}", PHH::array_to_string(time_banks)));
         }
+        
+        write!(f, "{}", array.join("\n"))
 
-        array.join("\n")
+    }
+}
+
+impl PHH {
+    fn parse_as_time(value: &Value) -> Result<Time, Error> {
+        if let Value::Datetime(t) = value {
+            if let Some(t) = t.time {
+                return Ok(Time::from_hms(t.hour, t.minute, t.second.unwrap_or_default()).unwrap());
+            } else {
+                return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
+            }
+        }
+        return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())));
     }
 
     fn time_to_string(t: Time) -> String{
