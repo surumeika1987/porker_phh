@@ -1,7 +1,8 @@
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::collections::HashSet;
 use serde::de::Unexpected;
-use toml::{Table, Value, value::{Datetime, Time}, map::Map};
+use toml::{Table, Value, value::Time, map::Map};
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 
 #[derive(Debug)]
@@ -514,8 +515,13 @@ impl FromStr for PHH {
             return Err(Error::ParseError(err.message().to_string()));
         }
         let data = data.unwrap();
+
+        let mut seen_keys = HashSet::new();
         
         for key in data.keys() {
+            if !seen_keys.insert(key) {
+                return Err(Error::ParseError(format!("Duplicate key: {}", key)));
+            }
             let value = data[key].clone();
             match &**key {
                 "variant" => variant = Some(value.try_into()?),
@@ -785,17 +791,6 @@ impl Display for PHH {
 }
 
 impl PHH {
-    fn str_to_time(s: &str) -> Result<Time, Error> {
-        let dt = Datetime::from_str(&format!("1970/01/01 {}", s)[..]);
-        if let Ok(dt) = dt {
-            if let Some(time) = dt.time {
-                return Ok(time);
-            }
-        }
-
-        Err(Error::ParseError(format!(r#"invalid type: string "{}", expected a TOML datetime"#, s)))
-    }
-
     fn array_to_string<T: ToString>(array: &Vec<T>) -> String {
         let array: Vec<String> = array.iter().map(|f| f.to_string()).collect();
         format!("[{}]", array.join(","))
