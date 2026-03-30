@@ -535,13 +535,14 @@ impl FromStr for PHH {
                 "postal_code" => postal_code = Some(value.try_into()?),
                 "country" => country = Some(value.try_into()?),
                 "time" => {
-                    match value {
-                        toml::Value::Datetime(dt) => {
-                            if let Some(t) = dt.time {
-                                time = Some(t);
-                            }
+                    if let toml::Value::Datetime(dt) = value {
+                        if let Some(t) = dt.time {
+                            time = Some(t);
+                        } else {
+                            return Err(Error::ParseError(format!(r#"Invalid time "{}". expect TOML Local Time."#, value.to_string())));
                         }
-                        _ => return Err(Error::ParseError(format!("Invalid time: {}", value.to_string())))
+                    } else {
+                        return Err(Error::ParseError(format!(r#"Invalid time "{}". expect TOML Local Time."#, value.to_string())));
                     }
                 }
                 "time_zone" => time_zone = Some(value.try_into()?),
