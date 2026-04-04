@@ -2,8 +2,9 @@ use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use std::collections::HashSet;
 use serde::de::Unexpected;
-use toml::{Table, Value, value::Time, map::Map};
+use toml::{Table, map::Map};
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
+use time::Time;
 
 #[derive(Debug)]
 pub enum Error {
@@ -13,6 +14,71 @@ pub enum Error {
 impl From<toml::de::Error> for Error {
     fn from(value: toml::de::Error) -> Self {
         Self::ParseError(value.message().to_string())
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct PHHTime(Time);
+
+impl From<toml::value::Time> for PHHTime {
+    fn from(value: toml::value::Time) -> Self {
+        Self(Time::from_hms_nano(
+                value.hour,
+                value.minute,
+                value.second.unwrap_or_default(),
+                value.nanosecond.unwrap_or_default(),
+            ).unwrap())
+    }
+}
+
+impl TryFrom<toml::Value> for PHHTime {
+    type Error = Error;
+
+    fn try_from(value: toml::Value) -> Result<Self, Self::Error> {
+        if let toml::Value::Datetime(dt) = value {
+            if let Some(t) = dt.time {
+                return Ok(PHHTime::from(t));
+            }
+        }
+        Err(Error::ParseError(
+                format!(r#"Invalid time "{}". expect TOML local time."#, value.to_string())
+        ))
+    }
+}
+
+impl Display for PHHTime {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_string())
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PHHCustomValue {
+    String(String),
+    Float(f64),
+    Intger(i64),
+    Boolean(bool),
+    Array(Vec<PHHCustomValue>),
+}
+
+impl TryFrom<toml::Value> for PHHCustomValue {
+    type Error = Error;
+
+    fn try_from(value: toml::Value) -> Result<Self, Self::Error> {
+        match value {
+            toml::Value::String(string) => Ok(PHHCustomValue::String(string)),
+            toml::Value::Integer(integer) => Ok(PHHCustomValue::Intger(integer)),
+            toml::Value::Float(float) => Ok(PHHCustomValue::Float(float)),
+            toml::Value::Boolean(bool) => Ok(PHHCustomValue::Boolean(bool)),
+            toml::Value::Array(array) => {
+                Ok(PHHCustomValue::Array(
+                        array.into_iter()
+                        .map(|v| Self::try_from(v))
+                        .collect::<Result<Vec<PHHCustomValue>, Error>>()?))
+            }
+            toml::Value::Datetime(dt) => Ok(PHHCustomValue::String(dt.to_string())),
+            toml::Value::Table(_) => Err(Error::ParseError("Custom field table parsing is not yet implemented.".to_string())),
+        }
     }
 }
 
@@ -46,7 +112,7 @@ impl FromStr for Variant {
             "N2L1D" => Ok(Variant::N2L1D),
             "F2L3D" => Ok(Variant::F2L3D),
             "FB" => Ok(Variant::FB),
-            _ => Err(Error::ParseError(format!("Invalid variant: {}", s))),
+            _ => Err(Error::ParseError(format!(r#"Invalid variant "{}". expect PHH variant."#, s))),
         }
     }
 }
@@ -113,7 +179,7 @@ impl FromStr for Suit {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() != 1 {
-            return Err(Error::ParseError(format!("Invalid suit: {}", s)));
+            return Err(Error::ParseError(format!(r#"Invalid suit "{}". expect PHH card suit."#, s)));
         }
 
         match s.chars().nth(0).unwrap() {
@@ -122,7 +188,7 @@ impl FromStr for Suit {
             'h' => Ok(Suit::Heart),
             's' => Ok(Suit::Spade),
             '?' => Ok(Suit::Unknown),
-            _ => Err(Error::ParseError(format!("Invalid suit: {}", s))),
+            _ => Err(Error::ParseError(format!(r#"Invalid suit "{}". expect PHH card suit."#, s))),
         }
     }
 }
@@ -163,7 +229,7 @@ impl FromStr for Rank {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() != 1 {
-            return Err(Error::ParseError(format!("Invalid Rank: {}", s)));
+            return Err(Error::ParseError(format!(r#"Invalid rank "{}". expect PHH card rank."#, s)));
         }
 
         match s.chars().nth(0).unwrap() {
@@ -181,7 +247,7 @@ impl FromStr for Rank {
             'Q' => Ok(Rank::Queen),
             'K' => Ok(Rank::King),
             '?' => Ok(Rank::Unknown),
-            _ => Err(Error::ParseError(format!("Invalid Rank: {}", s))),
+            _ => Err(Error::ParseError(format!(r#"Invalid rank "{}". expect PHH card rank."#, s))),
         }
     }
 }
@@ -219,7 +285,7 @@ impl FromStr for Card {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() != 2 {
-            return Err(Error::ParseError(format!("Invalid card: {}", s)));
+            return Err(Error::ParseError(format!(r#"Invalid card "{}". expect PHH card."#, s)));
         }
         Ok(Card {
             rank: Rank::from_str(&s[0..1])?,
@@ -280,7 +346,7 @@ impl FromStr for Action {
         }
         let split = s.split(' ').collect::<Vec<&str>>();
         if split.len() < 2 {
-            return Err(Error::ParseError(format!("Invalid action: {}", s)));
+            return Err(Error::ParseError(format!(r#"Invalid action "{}". expect PHH action."#, s)));
         }
         let key = split[0];
         let secound_key = split[1];
@@ -289,20 +355,20 @@ impl FromStr for Action {
             match &*secound_key {
                 "db" => {
                     if split.len() < 3 {
-                        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+                        return Err(Error::ParseError(format!(r#"Invalid action "{}". expect PHH action."#, s)));
                     }
                     let cards = Card::from_str_cards(split[2])?;
                     return Ok(Action::DealingCC { cards })
                 }
                 "dh" => {
                     if split.len() < 4 {
-                        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+                        return Err(Error::ParseError(format!(r#"Invalid action "{}". expect PHH action."#, s)));
                     }
                     let player = Self::parse_as_player_number(split[2])?;
                     let cards = Card::from_str_cards(split[3])?;
                     return Ok(Action::DealingDUC { player, cards });
                 }
-                _ => return Err(Error::ParseError(format!("Invalid action: {}", s))),
+                _ => return Err(Error::ParseError(format!(r#"Invalid action "{}". expect PHH action."#, s))),
             }
         }
 
@@ -313,13 +379,13 @@ impl FromStr for Action {
                 "pb" => return Ok(Action::BringingIn { player }),
                 "cbr" => {
                     if split.len() < 3 {
-                        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+                        return Err(Error::ParseError(format!(r#"Invalid cbr action "{}". expect "p cbr [amount]."#, s)));
                     }
                     let amount = split[2].parse::<f64>();
                     if let Ok(amount) = amount {
                         return Ok(Action::CBR { player, amount });
                     } else {
-                        return Err(Error::ParseError(format!("Invalid amount: {}", s)));
+                        return Err(Error::ParseError(format!(r#"Invalid cbr action "{}". expect "p cbr [amount]."#, s)));
                     }
                 }
                 "cc" => return Ok(Action::CC { player }),
@@ -344,11 +410,11 @@ impl FromStr for Action {
                     let cards = Card::from_str_cards(split[2])?;
                     return Ok(Action::SM { player, cards: Some(cards) });
                 }
-                _ => return Err(Error::ParseError(format!("Invalid action: {}", s))),
+                _ => return Err(Error::ParseError(format!(r#"Invalid action "{}". expect PHH action."#, s))),
             }
         }
 
-        return Err(Error::ParseError(format!("Invalid action: {}", s)));
+        Err(Error::ParseError(format!(r#"Invalid action "{}". expect PHH action."#, s)))
     }
 }
 
@@ -445,7 +511,7 @@ pub struct PHH {
     pub region: Option<String>,
     pub postal_code: Option<String>,
     pub country: Option<String>,
-    pub time: Option<Time>,
+    pub time: Option<PHHTime>,
     pub time_zone: Option<String>,
     pub time_zone_abbreviation: Option<String>,
     pub day: Option<u32>,
@@ -464,7 +530,7 @@ pub struct PHH {
     pub ante_trimming_status: Option<bool>,
     pub time_limit: Option<f64>,
     pub time_banks: Option<Vec<f64>>,
-    pub custom_field: Map<String, Value>,
+    pub custom_field: Map<String, PHHCustomValue>,
 }
 
 impl FromStr for PHH {
@@ -542,17 +608,7 @@ impl FromStr for PHH {
                 "region" => region = Some(value.try_into()?),
                 "postal_code" => postal_code = Some(value.try_into()?),
                 "country" => country = Some(value.try_into()?),
-                "time" => {
-                    if let toml::Value::Datetime(dt) = value {
-                        if let Some(t) = dt.time {
-                            time = Some(t);
-                        } else {
-                            return Err(Error::ParseError(format!(r#"Invalid time "{}". expect TOML Local Time."#, value.to_string())));
-                        }
-                    } else {
-                        return Err(Error::ParseError(format!(r#"Invalid time "{}". expect TOML Local Time."#, value.to_string())));
-                    }
-                }
+                "time" => time = Some(PHHTime::try_from(value)?),
                 "time_zone" => time_zone = Some(value.try_into()?),
                 "time_zone_abbreviation" => time_zone_abbreviation = Some(value.try_into()?),
                 "day" => day = Some(value.try_into()?),
@@ -573,7 +629,7 @@ impl FromStr for PHH {
                 "time_banks" => time_banks = Some(value.try_into()?),
                 _ => {
                     if key.starts_with('_') {
-                        custom_field.insert(key[1..].to_string(), value);
+                        custom_field.insert(key[1..].to_string(), PHHCustomValue::try_from(value)?);
                     }
                 }
             }
@@ -727,7 +783,7 @@ impl Display for PHH {
         if let Some(country) = &self.country {
             array.push(format!("country = \"{}\"", country));
         }
-        if let Some(time) = self.time {
+        if let Some(time) = &self.time {
             array.push(format!("time = {}", time));
         }
         if let Some(time_zone) = &self.time_zone {
@@ -909,7 +965,7 @@ time_banks = [20,11.5]
             assert_eq!(phh.region, Some("Tokyo".to_string()));
             assert_eq!(phh.postal_code, Some("000-0001".to_string()));
             assert_eq!(phh.country, Some("Japan".to_string()));
-            assert_eq!(phh.time, Some(Time { hour: 12, minute: 34, second: Some(56), nanosecond: None }));
+            assert_eq!(phh.time, Some(PHHTime(Time::from_hms(12, 34, 56).unwrap())));
             assert_eq!(phh.time_zone, Some("Asia/Tokyo".to_string()));
             assert_eq!(phh.time_zone_abbreviation, Some("JST".to_string()));
             assert_eq!(phh.day, Some(3));
