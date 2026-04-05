@@ -6,7 +6,7 @@ use toml::{Table, map::Map};
 use serde::{de::{self, Deserialize, Deserializer, Visitor}};
 use time::Time;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Error {
     ParseError(String),
 }
@@ -17,7 +17,7 @@ impl From<toml::de::Error> for Error {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct PHHTime(Time);
 
 impl From<toml::value::Time> for PHHTime {
@@ -52,7 +52,7 @@ impl Display for PHHTime {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PHHCustomValue {
     String(String),
     Float(f64),
@@ -82,7 +82,7 @@ impl TryFrom<toml::Value> for PHHCustomValue {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum Variant {
     FT,
     NT,
@@ -165,7 +165,7 @@ impl<'de> Deserialize<'de> for Variant {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum Suit {
     Club,
     Diamond,
@@ -206,7 +206,7 @@ impl Display for Suit {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum Rank {
     Ace,
     Deuce,
@@ -274,7 +274,7 @@ impl Display for Rank {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub struct Card {
     pub rank: Rank,
     pub suit: Suit,
@@ -315,7 +315,7 @@ impl Card {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Action {
     /// Dealing community cards
     DealingCC { cards: Vec<Card> },
@@ -491,7 +491,7 @@ impl Action {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PHH {
     pub variant: Variant,
     pub antes: Vec<f64>,
