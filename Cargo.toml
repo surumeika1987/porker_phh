@@ -2,6 +2,8 @@
 name = "poker_phh"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/surumeika1987/porker_phh"
+keywords = ["porker", "phh", "parser"]
 description = "A comprehensive Rust library for parsing and representing poker hand histories in the PHH (Poker Hand History) TOML-based format. Supports 11 poker variants with flexible data models for game states, actions, and player information."
 license = "MIT OR Apache-2.0"
 
