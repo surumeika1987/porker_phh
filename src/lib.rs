@@ -1,3 +1,65 @@
+//! # PHH - Poker Hand History Library
+//!
+//! `poker_phh` is a comprehensive Rust library for parsing and representing poker hand histories
+//! in the PHH (Poker Hand History) format. PHH is a standardized TOML-based format for storing
+//! and exchanging detailed information about poker hands.
+//!
+//! ## Features
+//!
+//! - **Multi-variant support**: Handles 11 different poker variants including Texas Hold'em,
+//!   Omaha, Seven Card Stud, Razz, and more
+//! - **Flexible data model**: Supports both required fields (game variant, stakes, actions)
+//!   and optional metadata (location, timing, player information)
+//! - **Custom fields**: Extensible support for custom fields via underscore-prefixed TOML keys
+//! - **TOML parsing**: Native integration with TOML format for human-readable hand records
+//! - **Complete action tracking**: Represents all poker actions including dealing, betting,
+//!   checking, folding, and discarding
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use std::str::FromStr;
+//! use poker_phh::PHH;
+//!
+//! let phh_toml = r#"
+//! variant = "NT"
+//! antes = [0, 1, 2]
+//! blinds_or_straddles = [0, 2, 1]
+//! small_bet = 1
+//! big_bet = 3
+//! min_bet = 2
+//! starting_stacks = [4, 3, 2]
+//! actions = ["d dh p1 7s4c", "d dh p2 Jd8h", "d db JhAs9s", "p1 pb"]
+//! "#;
+//!
+//! let hand = PHH::from_str(phh_toml)?;
+//! assert_eq!(hand.variant.to_string(), "NT");
+//! # Ok::<(), poker_phh::Error>(())
+//! ```
+//!
+//! ## Core Types
+//!
+//! - [`PHH`]: The main structure representing a complete poker hand
+//! - [`Variant`]: Enumeration of supported poker game variants
+//! - [`Action`]: Represents individual actions taken during a hand
+//! - [`Card`]: Represents a playing card with rank and suit
+//! - [`Error`]: Error type for parsing and validation failures
+//!
+//! ## Game Variants
+//!
+//! Supported variants include:
+//! - **FT**: Fixed Limit Texas Hold'em
+//! - **NT**: No Limit Texas Hold'em
+//! - **NS**: No Limit Seven Card Stud
+//! - **PO**: Pot Limit Omaha
+//! - **FO8**: Fixed Limit Omaha Hi/Lo
+//! - **F7S**: Fixed Limit Seven Card Stud
+//! - **F7S8**: Fixed Limit Seven Card Stud Hi/Lo
+//! - **FR**: Fixed Limit Razz
+//! - **N2L1D**: No Limit 2-7 Lowball Single Draw
+//! - **F2L3D**: Fixed Limit 2-7 Triple Draw
+//! - **FB**: Fixed Limit Badugi
+
 pub mod error;
 pub mod time;
 pub mod value;
