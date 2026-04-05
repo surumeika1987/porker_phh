@@ -34,11 +34,11 @@ use poker_phh::PHH;
 
 let phh_toml = r#"
 variant = "NT"
-antes = [0, 1, 2]
-blinds_or_straddles = [0, 2, 1]
+antes = [0, 0, 0]
+blinds_or_straddles = [0, 1, 2]
 min_bet = 2
-starting_stacks = [4, 3, 2]
-actions = ["d dh p1 7s4c", "d dh p2 Jd8h", "d db JhAs9s", "p1 pb"]
+starting_stacks = [100, 200, 150]
+actions = ["d dh p1 7s4c", "d dh p2 Jd8h", "d dh p3 KhQh", "p1 cbr 6", "p2 f", "p3 cc"]
 "#;
 
 let hand = PHH::from_str(phh_toml)?;
