@@ -36,8 +36,6 @@ let phh_toml = r#"
 variant = "NT"
 antes = [0, 1, 2]
 blinds_or_straddles = [0, 2, 1]
-small_bet = 1
-big_bet = 3
 min_bet = 2
 starting_stacks = [4, 3, 2]
 actions = ["d dh p1 7s4c", "d dh p2 Jd8h", "d db JhAs9s", "p1 pb"]
@@ -83,11 +81,9 @@ The PHH format uses TOML to represent poker hand histories. Here's a comprehensi
 variant = "NT"
 antes = [0, 1, 2]
 blinds_or_straddles = [0, 2, 1]
-small_bet = 1
-big_bet = 3
 min_bet = 2
 starting_stacks = [100, 200, 150]
-actions = ["d dh p1 7s4c", "d dh p2 JdQh", "d db KhAs9s", "p1 b 10"]
+actions = ["d dh p1 7s4c", "d dh p2 JdQh", "d db KhAs9s", "p1 cbr 10"]
 
 # Optional metadata
 author = "Alice"
@@ -120,30 +116,20 @@ finishing_stacks = [150, 250, 50]
 winnings = [50, 150, -100]
 currency = "USD"
 currency_symbol = "$"
-
-# Advanced settings
-bring_in = 2
-ante_trimming_status = true
-time_limit = 30
-time_banks = [120, 120, 120]
 ```
 
 ### Action Format
 
 Actions in PHH follow a specific string-based format. For complete details, see the [PHH Documentation](https://phh.readthedocs.io).
 
-- `d dh pN <cards>` - Dealing hole cards to player N
 - `d db <cards>` - Dealing board cards (community cards)
-- `pN pb` - Player N posts blind
-- `pN b <amount>` - Player N bets an amount
-- `pN cb <amount>` - Player N check-bets an amount
-- `pN cbr <amount>` - Player N check-bet raises an amount
-- `pN cc` - Player N calls
-- `pN r <amount>` - Player N raises
+- `d dh pN <cards>` - Dealing hole cards to player N
+- `pN pb` - Player N posts bring-in
+- `pN cbr <amount>` - Player N completes/bets/raises to an amount
+- `pN cc` - Player N checks or calls
 - `pN f` - Player N folds
-- `pN c` - Player N checks
-- `pN sd <cards>` - Player N stands pat (no discard)
-- `pN sm` - Player N shows/mucks
+- `pN sd [cards]` - Player N stands pat or discards cards
+- `pN sm [cards]` - Player N shows or mucks hole cards
 
 ## Use Cases
 
